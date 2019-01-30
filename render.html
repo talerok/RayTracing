@@ -1,0 +1,379 @@
+<html>
+    <canvas id='main' width='768' height="768"></canvas>
+
+    <script>
+        //Math
+        var minusVector3 = function(vecA, vecB){
+            return {
+                x: vecA.x - vecB.x,
+                y: vecA.y - vecB.y,
+                z: vecA.z - vecB.z
+            };
+        }
+
+        var plusVector3 = function(vecA, vecB){
+            return {
+                x: vecA.x + vecB.x,
+                y: vecA.y + vecB.y,
+                z: vecA.z + vecB.z
+            };
+        }
+
+        var mulVector3 = function(vecA, b){
+            return {
+                x: vecA.x * b,
+                y: vecA.y * b,
+                z: vecA.z * b
+            };
+        }
+
+        var dotVector3 = function(vecA, vecB){
+            return vecA.x * vecB.x + vecA.y * vecB.y + vecA.z * vecB.z;
+        }
+
+        var normalizeVector3 = function(vecA){
+            var r = normVector3(vecA);
+            return {
+                x: vecA.x / r,
+                y: vecA.y / r,
+                z: vecA.z / r
+            };
+        }
+
+        var crossVector3 = function(vecA, vecB){
+            return {
+                x: vecA.y * vecB.z - vecA.z * vecB.y,
+                y: vecA.z * vecB.x - vecA.x * vecB.z,
+                z: vecA.x * vecB.y - vecA.y * vecB.x
+            };
+        }
+
+        var normVector3 = function(vecA){
+            return Math.sqrt(vecA.x * vecA.x + vecA.y * vecA.y + vecA.z * vecA.z);
+        }
+
+
+        var max1Vector3 = function(vecA){
+            var r = Math.max(vecA.x, Math.max(vecA.y, vecA.z));
+            if(r < 1)
+                return vecA;
+            return {
+                x: vecA.x / r,
+                y: vecA.y / r,
+                z: vecA.z / r
+            }
+        }
+
+    </script>
+
+    <script>
+        //Primitives
+        var Light = function(pos, intensity){
+           var _pos = pos;
+           var _intensity = intensity;
+
+           return {
+               pos: _pos,
+               intensity: _intensity
+           }
+        }
+
+        var Material = function(diffuse, albedo, refractiveIndex){
+            var _diffuse = diffuse;
+            var _albedo = albedo;
+            var _refractiveIndex = refractiveIndex;
+            return {
+                diffuse: _diffuse,
+                albedo: _albedo,
+                refractiveIndex: _refractiveIndex
+            }
+        }
+
+        var Sphere = function(pos, rad, material){
+            var _pos = pos;
+            var _material = material;
+            var _rad = rad;
+            var _rayIntersect = function(orig, dir){
+                var l = minusVector3(_pos, orig);
+                var tca = dotVector3(l, dir);
+                var d2 = dotVector3(l,l) - tca*tca;
+                if(d2 > _rad * _rad)
+                    return { intersect: false, dist: 0};
+                var thc = Math.sqrt(_rad * _rad - d2);
+
+                var t0 = tca - thc;
+                var t1 = tca + thc;
+                if(t0 < 0) t0 = t1;
+                if(t0 < 0) 
+                    return { intersect: false, dist: t0 };
+
+                var point = plusVector3(orig, mulVector3(dir,t0));
+                var norm =  normalizeVector3(minusVector3(point, _pos));
+
+                return { intersect: true, dist: t0, point: point, norm: norm };
+            }
+
+            return {
+                rayIntersect: _rayIntersect,
+                material: _material,
+                pos: _pos
+            };
+        }
+
+        var Triangle = function(pointA, pointB, pointC, material){
+            var _pointA = pointA;
+            var _pointB = pointB;
+            var _pointC = pointC;
+            var _material = material;
+
+            //Möller–Trumbore intersection algorithm
+            var _rayIntersect = function(orig, dir){
+                var e1 = minusVector3(pointB, pointA);
+                var e2 = minusVector3(pointC, pointA);
+                var pvec = crossVector3(dir, e2);
+                var det = dotVector3(e1, pvec);
+
+                if(det <= 0)
+                    return { intersect: false, dist: 0 };
+
+                var invDet = 1 / det;
+                var tvec = minusVector3(orig, pointA);
+                var u = dotVector3(tvec, pvec) * invDet;
+                if(u < 0 || u > 1)
+                    return { intersect: false, dist: 0 }; 
+
+                var qvec = crossVector3(tvec, e1);
+                var v = dotVector3(dir, qvec) * invDet;
+                if(v < 0 || u + v > 1)
+                    return { intersect: false, dist: 0 }; 
+                
+                var dist = dotVector3(e2,qvec) * invDet;
+                if(dist == 0)
+                    return { intersect: false, dist: 0 }; 
+
+                var point = plusVector3(orig, mulVector3(dir,dist));
+                var norm =  crossVector3(e1, e2);
+                
+                return { intersect:  true, dist: dist, point: point, norm: normalizeVector3(norm) }; 
+            }
+
+            return {
+                rayIntersect: _rayIntersect,
+                material: _material,
+                pos: _pointA
+            };
+        }
+    
+    var Model = function(pos, trianglePositions, material){
+
+        var _pos = pos;
+        var _material = material;
+
+        var _triangles = trianglePositions.map(function(x) {
+            return new Triangle(plusVector3(pos,x[0]), plusVector3(pos,x[1]), plusVector3(pos, x[2]), _material);
+        });
+
+        var _rayIntersect = function(orig, dir){
+           for(var i = 0; i < _triangles.length; i++){
+               var res = _triangles[i].rayIntersect(orig,dir);
+               if(res.intersect)
+                    return res;
+           }
+        }
+
+        return {
+            rayIntersect: _rayIntersect,
+            material: _material,
+            pos: _pointA
+        };
+    }
+
+    </script>
+
+    <script>
+        var defaultBackGroundColor = { x: 0.2, y: 0.7, z: 0.8 };
+
+        //Render
+        var setCanvasDataByPixels = function(canvas, data){
+            var ctx = canvas.getContext('2d');
+            var imgData = ctx
+                .createImageData(canvas.width, canvas.height);
+            var offset = 0;
+            for(y = canvas.height - 1; y >= 0; y--){
+                for(var x = 0; x < canvas.width; x++){
+                    imgData.data[offset++] = data[x][y].r; 
+                    imgData.data[offset++] = data[x][y].g; 
+                    imgData.data[offset++] = data[x][y].b; 
+                    imgData.data[offset++] = 255; 
+                }
+            }
+            ctx.putImageData(imgData,0,0);
+        }
+
+        var generateTestImage = function(xSize, ySize){
+            var res = [];
+            for(var i = 0; i < xSize; i++){
+                res[i] = [];
+                for(var j = 0; j < ySize; j++){
+                    res[i][j] = {
+                        r: (i + j) % 256,
+                        g: (i) % 256,
+                        b: (j) % 256
+                    };
+                }
+            }
+            return res;
+        }
+
+        var sceneIntersect = function(objs, orig, dir, dist){
+            var res = null;
+            objs.forEach(function(obj){
+                var objRes = obj.rayIntersect(orig,dir);
+                if(!objRes || objRes.dist > dist)
+                    return;
+                if(objRes.intersect && objRes.dist < dist && (res == null || res.dist > objRes.dist)){
+                    res = { 
+                        dist: objRes.dist,
+                        point: objRes.point,
+                        norm: objRes.norm,
+                        material: obj.material
+                    };
+                }
+            });
+            return res;
+        }
+
+        var castRay = function(orig, dir, objs, lights, backGroundColor, dist, maxDepht = 0){
+
+            var reflect = function(i, n){
+                return minusVector3(i, mulVector3(n, 2*dotVector3(i, n)));
+            }
+
+            var refract = function(i, n, rfIndex){
+                var cosi = Math.max(-1, Math.min(1, dotVector3(i,n)));
+                var etai, etat, norm;
+                if(cosi >= 0){
+                    etai = 1;
+                    etat = rfIndex;
+                    norm = n;
+                }else{
+                    cosi = -cosi;
+                    etai = rfIndex;
+                    etat = 1;
+                    norm = mulVector3(n, -1);
+                }
+                var eta = etai / etat;
+                var k = 1 + eta*eta*(1 - cosi*cosi);
+
+                return k < 0 ? {x: 1, y: 0, z: 0} : plusVector3(mulVector3(i, eta), mulVector3(n, eta * cosi - Math.sqrt(k)));      
+            }
+
+            if(maxDepht < 0)
+                return backGroundColor;
+
+            var res = sceneIntersect(objs, orig, dir, dist);
+            if(!res)
+                return backGroundColor;
+          
+            var reflectDir =  normalizeVector3(reflect(dir, res.norm));
+            var reflectOrig = dotVector3(reflectDir, res.norm) < 0 ?
+                minusVector3(res.point, mulVector3(res.norm, 0.001)) : plusVector3(res.point, mulVector3(res.norm, 0.001));
+            var reflectRes = castRay(reflectOrig, reflectDir, objs, lights, backGroundColor, dist, maxDepht - 1);
+
+            var refractDir = normalizeVector3(refract(dir, res.norm, res.material.refractiveIndex));
+            var refractOrig = dotVector3(refractDir, res.norm) < 0 ?
+                minusVector3(res.point, mulVector3(res.norm, 0.001)) : plusVector3(res.point, mulVector3(res.norm, 0.001));
+            var refractRes = castRay(refractOrig, refractDir, objs, lights, backGroundColor, dist, maxDepht - 1);
+
+            var diffuseLightIntensity = 0, specularLightIntensity = 0;
+
+            for(var i = 0; i < lights.length; i++){
+                var lightDir = normalizeVector3(minusVector3(lights[i].pos, res.point));
+                var lightDist = normVector3(minusVector3(lights[i].pos, res.point));
+
+                var shadowOrig = dotVector3(lightDir, res.norm) < 0 ? 
+                    minusVector3(res.point, mulVector3(res.norm, 0.001)) : plusVector3(res.point, mulVector3(res.norm, 0.001));
+
+                var shadowIntersect = sceneIntersect(objs, shadowOrig, lightDir, 1000);
+
+                if(shadowIntersect && normVector3(minusVector3(shadowIntersect.point, shadowOrig)) < lightDist)
+                    continue;
+
+                diffuseLightIntensity += lights[i].intensity * Math.max(0,dotVector3(lightDir, res.norm));
+                specularLightIntensity += Math.pow(Math.max(0, dotVector3(mulVector3(reflect(mulVector3(lightDir, -1), res.norm),-1), dir)), res.material.albedo.exponent) 
+                    * lights[i].intensity;
+            }
+
+            return max1Vector3({
+                x: res.material.diffuse.r * diffuseLightIntensity * res.material.albedo.a + specularLightIntensity * res.material.albedo.b + reflectRes.x * res.material.albedo.c + refractRes.x * res.material.albedo.d,
+                y: res.material.diffuse.g * diffuseLightIntensity * res.material.albedo.a + specularLightIntensity * res.material.albedo.b + reflectRes.y * res.material.albedo.c + refractRes.y * res.material.albedo.d,
+                z: res.material.diffuse.b * diffuseLightIntensity * res.material.albedo.a + specularLightIntensity * res.material.albedo.b + reflectRes.z * res.material.albedo.c + refractRes.z * res.material.albedo.d
+            });
+        }
+
+        var convertVectorToRGB256 = function(vecA){
+            return {
+                r: vecA.x * 256,
+                g: vecA.y * 256,
+                b: vecA.z * 256
+            }
+        }
+
+        var render = function(objs, width, height, fov, camPos, lights, backGroundColor, dist, depht){
+            var res = [];
+            for(var i = 0; i < width; i++){
+                res[i] = [];
+                for(var j = 0; j < height; j++){
+                    var x = (2*(i+0.5)/width - 1)*Math.tan(fov/2)*width/height;
+                    var y = (2*(j+0.5)/height - 1)*Math.tan(fov/2);
+                    var dir = normalizeVector3({x: x, y: y, z: -1});
+                    var cl = castRay(camPos, dir, objs, lights, backGroundColor, dist, depht);
+                    res[i][j] = convertVectorToRGB256(cl);
+                }
+            }
+            return res;
+        }
+
+        var main = document.getElementById('main');
+        if(!main)
+            throw new Error('canvas doesn\'t exist');
+
+        var redRubberMaterial = new Material({r: 0.3, g: 0.1, b: 0.1 }, {exponent: 50, a: 0.6, b: 0.3, c: 0, d: 0}, 1);
+        var ivoryMaterial = new Material({r: 0.4, g: 0.4, b: 0.3}, {exponent: 10, a: 0.5, b: 0.4, c: 0.2, d: 0}, 1)
+        var mirrorMaterial = new Material({r: 1, g: 1, b: 1}, {exponent: 1425, a: 0, b: 10, c: 0.8, d: 0}, 1)
+        var glassMaterial = new Material({r: 0.6, g: 0.7, b: 0.8}, {exponent: 125, a: 0, b: 0.5, c: 0.1, d: 0.8}, 1.4)
+
+        var testLight = new Light({x: 0, y: 10, z: 10}, 1.8);
+
+        var lights = [
+            new Light({x: -20, y: 20, z: 20}, 1.5),
+            new Light({x: 30, y: 50, z: -25}, 1.8),
+            new Light({x: 30, y: 20, z: 30}, 1.7)
+        ];
+
+        var objects = [
+            new Sphere({x: -3,  y: 0,  z: -16}, 2, ivoryMaterial),
+            new Sphere({x: -1,  y: -1.5,  z: -12}, 2, mirrorMaterial),
+            new Sphere({x: 1.5,  y: -0.5,  z: -18}, 3, redRubberMaterial),
+            new Sphere({x: 7,  y: 5,  z: -18}, 4, mirrorMaterial),
+            //new Triangle({x: 3, y: 0, z: -7}, {x: 0, y: 3, z: -7}, {x: -3, y: 0, z: -7}, redRubberMaterial),
+            //new Triangle({x: 6, y: 3, z: -5}, {x: 3, y: 6, z: -5}, {x: -4, y: 3, z: -5}, redRubberMaterial)
+        ];
+
+        var data = render(
+            objects, 
+            main.width, 
+            main.height, 
+            1.57, 
+            {x: 0, y: 0, z: 0},
+            lights,
+            defaultBackGroundColor,
+            1000,
+            4);
+
+        setCanvasDataByPixels(main, data);
+        
+
+
+    </script>
+</html>
